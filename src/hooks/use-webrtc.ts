@@ -289,10 +289,14 @@ export function useWebRTC() {
     }
 
     pc.ontrack = (event) => {
-      console.log('[WebRTC] 🎥 Remote track received:', event.track.kind)
+      console.log('[WebRTC] 🎥 Remote track received:', event.track.kind, event.track.label)
       if (remoteVideoRef.current && event.streams[0]) {
+        console.log('[WebRTC] Setting remote stream with tracks:', event.streams[0].getTracks().map(t => t.kind))
         remoteVideoRef.current.srcObject = event.streams[0]
+        // Принудительно воспроизводим
+        remoteVideoRef.current.play().catch(e => console.log('[WebRTC] Remote auto-play prevented:', e))
         setConnectionStatus('connected')
+        setIsEncrypted(true)
       }
     }
 
@@ -583,13 +587,27 @@ export function useWebRTC() {
 
       // Get media
       const constraints = getMediaConstraints(mode, facingMode)
+      console.log('[WebRTC] 📹 Requesting media with constraints:', constraints)
+      
       if (constraints.video || constraints.audio) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia(constraints)
+          console.log('[WebRTC] ✅ Got media stream:', stream.getTracks().map(t => `${t.kind}: ${t.label}`))
+          
           localStreamRef.current = stream
-          if (localVideoRef.current) localVideoRef.current.srcObject = stream
+          
+          // Важно: устанавливаем srcObject после небольшой задержки для надежности
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream
+            // Принудительно запускаем воспроизведение
+            localVideoRef.current.play().catch(e => console.log('[WebRTC] Auto-play prevented:', e))
+          }
+          
+          setIsVideoEnabled(stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled)
+          setIsAudioEnabled(stream.getAudioTracks().length > 0 && stream.getAudioTracks()[0].enabled)
         } catch (err) {
-          console.error('[WebRTC] Media error:', err)
+          console.error('[WebRTC] ❌ Media error:', err)
+          // Продолжаем без медиа (data-only mode)
         }
       }
 

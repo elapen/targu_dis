@@ -155,9 +155,8 @@ export function DemoSection() {
 
   // Fullscreen video layout
   const VideoContainer = () => {
-    const localVideoClasses = cn(
-      "bg-muted overflow-hidden transition-all duration-300",
-      isMirrored && "scale-x-[-1]",
+    const localContainerClasses = cn(
+      "bg-muted overflow-hidden transition-all duration-300 relative",
       isFullscreen 
         ? isLocalLarge 
           ? "w-full h-full rounded-none" 
@@ -166,13 +165,16 @@ export function DemoSection() {
     )
 
     const remoteVideoClasses = cn(
-      "bg-muted overflow-hidden transition-all duration-300",
+      "bg-muted overflow-hidden transition-all duration-300 relative",
       isFullscreen 
         ? !isLocalLarge 
           ? "w-full h-full rounded-none" 
           : "absolute bottom-4 right-4 w-32 h-24 sm:w-48 sm:h-36 rounded-xl border-2 border-white/30 shadow-2xl z-10 cursor-pointer hover:scale-105"
         : "relative aspect-video rounded-lg sm:rounded-xl border-2 border-secondary"
     )
+
+    // Стиль для зеркалирования - применяется ТОЛЬКО к video элементу
+    const localVideoStyle = isMirrored ? { transform: 'scaleX(-1)' } : undefined
 
     return (
       <div 
@@ -186,10 +188,17 @@ export function DemoSection() {
       >
         {/* Local Video */}
         <div 
-          className={localVideoClasses}
+          className={localContainerClasses}
           onClick={isFullscreen && !isLocalLarge ? swapVideos : undefined}
         >
-          <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+          <video 
+            ref={localVideoRef} 
+            autoPlay 
+            muted 
+            playsInline 
+            className="w-full h-full object-cover" 
+            style={localVideoStyle}
+          />
           {!isFullscreen && (
             <div className="absolute bottom-0 inset-x-0 p-1.5 sm:p-2 bg-gradient-to-t from-black/60">
               <p className="text-[10px] sm:text-xs text-white font-medium">Сіз</p>
