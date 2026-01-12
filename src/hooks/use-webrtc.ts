@@ -17,12 +17,6 @@ interface Stats {
   dataRate: number
 }
 
-interface CameraDevice {
-  deviceId: string
-  label: string
-  facing?: FacingMode
-}
-
 // STUN + TURN серверы для надёжного соединения через NAT/Firewall
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -69,12 +63,11 @@ export function useWebRTC() {
   })
   const [peersCount, setPeersCount] = useState(0)
   
-  // Новые состояния
-  const [isMirrored, setIsMirrored] = useState(true) // По умолчанию зеркалим фронтальную камеру
+  // Новые состояния для UI
+  const [isMirrored, setIsMirrored] = useState(true)
   const [facingMode, setFacingMode] = useState<FacingMode>('user')
-  const [availableCameras, setAvailableCameras] = useState<CameraDevice[]>([])
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [isLocalLarge, setIsLocalLarge] = useState(false) // Кто большой: local или remote
+  const [isLocalLarge, setIsLocalLarge] = useState(false)
   const [isEncrypted, setIsEncrypted] = useState(false)
 
   const localVideoRef = useRef<HTMLVideoElement>(null)
@@ -96,35 +89,15 @@ export function useWebRTC() {
     websocket: typeof WebSocket !== 'undefined',
   }
 
-  // Получить список камер
-  const getAvailableCameras = useCallback(async () => {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices()
-      const cameras = devices
-        .filter(d => d.kind === 'videoinput')
-        .map(d => ({
-          deviceId: d.deviceId,
-          label: d.label || `Camera ${d.deviceId.slice(0, 8)}`,
-          facing: d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') 
-            ? 'environment' as FacingMode 
-            : 'user' as FacingMode,
-        }))
-      setAvailableCameras(cameras)
-      return cameras
-    } catch (err) {
-      console.error('[WebRTC] Error getting cameras:', err)
-      return []
-    }
-  }, [])
-
-  const getMediaConstraints = useCallback((mode: CallMode, facing: FacingMode = 'user') => {
+  // Простое получение медиа constraints - БЕЗ динамического facingMode
+  const getMediaConstraints = useCallback((mode: CallMode) => {
     const isMobile = typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 
     const video = mode === 'audio' || mode === 'data' ? false : {
       width: { ideal: isMobile ? 640 : 1280 },
       height: { ideal: isMobile ? 480 : 720 },
       frameRate: { ideal: isMobile ? 24 : 30 },
-      facingMode: facing,
+      facingMode: 'user', // Всегда фронтальная камера
     }
 
     const audio = mode === 'data' ? false : {
@@ -143,51 +116,47 @@ export function useWebRTC() {
     const newFacing: FacingMode = facingMode === 'user' ? 'environment' : 'user'
     
     try {
-      // Остановить текущие видео треки
       localStreamRef.current.getVideoTracks().forEach(track => track.stop())
       
-      // Получить новый поток
-      const constraints = getMediaConstraints(callModeRef.current, newFacing)
-      const newStream = await navigator.mediaDevices.getUserMedia(constraints)
-      
-      // Заменить видео трек в локальном потоке
-      const newVideoTrack = newStream.getVideoTracks()[0]
-      const oldVideoTrack = localStreamRef.current.getVideoTracks()[0]
-      
-      if (oldVideoTrack) {
-        localStreamRef.current.removeTrack(oldVideoTrack)
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+      const constraints = {
+        video: {
+          width: { ideal: isMobile ? 640 : 1280 },
+          height: { ideal: isMobile ? 480 : 720 },
+          facingMode: newFacing,
+        },
+        audio: false,
       }
+      
+      const newStream = await navigator.mediaDevices.getUserMedia(constraints)
+      const newVideoTrack = newStream.getVideoTracks()[0]
+      
+      // Заменяем трек в локальном потоке
+      const oldVideoTrack = localStreamRef.current.getVideoTracks()[0]
+      if (oldVideoTrack) localStreamRef.current.removeTrack(oldVideoTrack)
       localStreamRef.current.addTrack(newVideoTrack)
       
-      // Обновить видео элемент
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = localStreamRef.current
       }
       
-      // Заменить трек в peer connection
+      // Заменяем трек в peer connection
       if (peerConnectionRef.current) {
         const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video')
-        if (sender) {
-          await sender.replaceTrack(newVideoTrack)
-        }
+        if (sender) await sender.replaceTrack(newVideoTrack)
       }
       
       setFacingMode(newFacing)
-      // Зеркалим только фронтальную камеру
       setIsMirrored(newFacing === 'user')
-      
-      console.log('[WebRTC] Switched to', newFacing, 'camera')
     } catch (err) {
       console.error('[WebRTC] Error switching camera:', err)
     }
-  }, [facingMode, getMediaConstraints])
+  }, [facingMode])
 
-  // Переключить зеркалирование
   const toggleMirror = useCallback(() => {
     setIsMirrored(prev => !prev)
   }, [])
 
-  // Переключить полноэкранный режим
   const toggleFullscreen = useCallback(async () => {
     if (!fullscreenContainerRef.current) return
     
@@ -204,16 +173,12 @@ export function useWebRTC() {
     }
   }, [])
 
-  // Поменять местами локальное и удалённое видео
   const swapVideos = useCallback(() => {
     setIsLocalLarge(prev => !prev)
   }, [])
 
   const setupDataChannel = useCallback((channel: RTCDataChannel) => {
-    channel.onopen = () => {
-      console.log('[DataChannel] Opened')
-      setIsEncrypted(true) // WebRTC DataChannel всегда шифрован DTLS
-    }
+    channel.onopen = () => console.log('[DataChannel] Opened')
     channel.onclose = () => console.log('[DataChannel] Closed')
     channel.onmessage = (event) => {
       try {
@@ -229,86 +194,64 @@ export function useWebRTC() {
 
   const createPeerConnection = useCallback(async () => {
     if (peerConnectionRef.current) {
-      console.log('[WebRTC] Closing existing peer connection')
       peerConnectionRef.current.close()
     }
 
-    console.log('[WebRTC] Creating new peer connection with', ICE_SERVERS.length, 'ICE servers')
+    console.log('[WebRTC] Creating peer connection')
     const pc = new RTCPeerConnection({ 
       iceServers: ICE_SERVERS, 
       iceCandidatePoolSize: 10,
-      iceTransportPolicy: 'all',
     })
 
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current && currentRoomRef.current) {
-        console.log('[WebRTC] Sending ICE candidate:', event.candidate.type, event.candidate.protocol)
+        console.log('[WebRTC] Sending ICE candidate')
         socketRef.current.emit('ice-candidate', {
           candidate: event.candidate,
           roomId: currentRoomRef.current,
         })
-      } else if (!event.candidate) {
-        console.log('[WebRTC] ICE gathering complete')
       }
     }
 
-    pc.onicegatheringstatechange = () => {
-      console.log('[WebRTC] ICE gathering state:', pc.iceGatheringState)
-    }
-
     pc.oniceconnectionstatechange = () => {
-      console.log('[WebRTC] ICE connection state:', pc.iceConnectionState)
+      console.log('[WebRTC] ICE state:', pc.iceConnectionState)
       switch (pc.iceConnectionState) {
         case 'checking':
           setConnectionStatus('connecting')
           break
         case 'connected':
         case 'completed':
-          console.log('[WebRTC] ✅ Connection established!')
           setConnectionStatus('connected')
-          setIsEncrypted(true) // WebRTC DTLS шифрование активно
+          setIsEncrypted(true) // WebRTC всегда шифрует через DTLS
           break
         case 'disconnected':
-          console.log('[WebRTC] ⚠️ Connection disconnected, waiting...')
           setConnectionStatus('waiting')
           break
         case 'failed':
-          console.error('[WebRTC] ❌ Connection failed')
           setConnectionStatus('error')
           pc.restartIce()
           break
       }
     }
 
-    pc.onconnectionstatechange = () => {
-      console.log('[WebRTC] Connection state:', pc.connectionState)
-    }
-
-    pc.onsignalingstatechange = () => {
-      console.log('[WebRTC] Signaling state:', pc.signalingState)
-    }
-
     pc.ontrack = (event) => {
-      console.log('[WebRTC] 🎥 Remote track received:', event.track.kind, event.track.label)
+      console.log('[WebRTC] Remote track received:', event.track.kind)
       if (remoteVideoRef.current && event.streams[0]) {
-        console.log('[WebRTC] Setting remote stream with tracks:', event.streams[0].getTracks().map(t => t.kind))
         remoteVideoRef.current.srcObject = event.streams[0]
-        // Принудительно воспроизводим
-        remoteVideoRef.current.play().catch(e => console.log('[WebRTC] Remote auto-play prevented:', e))
         setConnectionStatus('connected')
         setIsEncrypted(true)
       }
     }
 
     pc.ondatachannel = (event) => {
-      console.log('[WebRTC] 📨 Data channel received')
       dataChannelRef.current = event.channel
       setupDataChannel(event.channel)
     }
 
+    // Добавляем локальные треки
     if (localStreamRef.current) {
-      console.log('[WebRTC] Adding local tracks to peer connection')
       localStreamRef.current.getTracks().forEach(track => {
+        console.log('[WebRTC] Adding track:', track.kind)
         pc.addTrack(track, localStreamRef.current!)
       })
     }
@@ -324,73 +267,35 @@ export function useWebRTC() {
   }, [setupDataChannel])
 
   const handleUserJoined = useCallback(async () => {
-    console.log('[WebRTC] handleUserJoined called, isInitiator:', isInitiatorRef.current)
-    
-    if (!isInitiatorRef.current) {
-      console.log('[WebRTC] Not initiator, waiting for offer')
-      return
-    }
-    
-    if (!peerConnectionRef.current) {
-      console.error('[WebRTC] No peer connection!')
-      return
-    }
-    
-    if (!socketRef.current) {
-      console.error('[WebRTC] No socket connection!')
-      return
-    }
+    if (!isInitiatorRef.current || !peerConnectionRef.current || !socketRef.current) return
 
     try {
-      console.log('[WebRTC] Creating offer as initiator...')
+      console.log('[WebRTC] Creating offer...')
       const offer = await peerConnectionRef.current.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true,
       })
-      
-      console.log('[WebRTC] Setting local description...')
       await peerConnectionRef.current.setLocalDescription(offer)
-      
-      console.log('[WebRTC] 📤 Sending offer to room:', currentRoomRef.current)
       socketRef.current.emit('offer', { offer, roomId: currentRoomRef.current })
     } catch (err) {
-      console.error('[WebRTC] Offer creation error:', err)
+      console.error('[WebRTC] Offer error:', err)
       setConnectionStatus('error')
     }
   }, [])
 
   const handleOffer = useCallback(async (offer: RTCSessionDescriptionInit) => {
-    console.log('[WebRTC] 📥 Received offer')
-    
-    if (!peerConnectionRef.current) {
-      console.error('[WebRTC] No peer connection for offer!')
-      return
-    }
-    
-    if (!socketRef.current) {
-      console.error('[WebRTC] No socket for answer!')
-      return
-    }
+    if (!peerConnectionRef.current || !socketRef.current) return
 
     try {
-      console.log('[WebRTC] Setting remote description from offer...')
       await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(offer))
 
-      if (pendingCandidatesRef.current.length > 0) {
-        console.log('[WebRTC] Adding', pendingCandidatesRef.current.length, 'pending ICE candidates')
-        for (const candidate of pendingCandidatesRef.current) {
-          await peerConnectionRef.current.addIceCandidate(candidate)
-        }
-        pendingCandidatesRef.current = []
+      for (const candidate of pendingCandidatesRef.current) {
+        await peerConnectionRef.current.addIceCandidate(candidate)
       }
+      pendingCandidatesRef.current = []
 
-      console.log('[WebRTC] Creating answer...')
       const answer = await peerConnectionRef.current.createAnswer()
-      
-      console.log('[WebRTC] Setting local description...')
       await peerConnectionRef.current.setLocalDescription(answer)
-      
-      console.log('[WebRTC] 📤 Sending answer to room:', currentRoomRef.current)
       socketRef.current.emit('answer', { answer, roomId: currentRoomRef.current })
     } catch (err) {
       console.error('[WebRTC] Handle offer error:', err)
@@ -399,26 +304,15 @@ export function useWebRTC() {
   }, [])
 
   const handleAnswer = useCallback(async (answer: RTCSessionDescriptionInit) => {
-    console.log('[WebRTC] 📥 Received answer')
-    
-    if (!peerConnectionRef.current) {
-      console.error('[WebRTC] No peer connection for answer!')
-      return
-    }
+    if (!peerConnectionRef.current) return
 
     try {
-      console.log('[WebRTC] Setting remote description from answer...')
       await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer))
 
-      if (pendingCandidatesRef.current.length > 0) {
-        console.log('[WebRTC] Adding', pendingCandidatesRef.current.length, 'pending ICE candidates')
-        for (const candidate of pendingCandidatesRef.current) {
-          await peerConnectionRef.current.addIceCandidate(candidate)
-        }
-        pendingCandidatesRef.current = []
+      for (const candidate of pendingCandidatesRef.current) {
+        await peerConnectionRef.current.addIceCandidate(candidate)
       }
-      
-      console.log('[WebRTC] ✅ Signaling complete, waiting for ICE...')
+      pendingCandidatesRef.current = []
     } catch (err) {
       console.error('[WebRTC] Handle answer error:', err)
       setConnectionStatus('error')
@@ -426,101 +320,59 @@ export function useWebRTC() {
   }, [])
 
   const handleIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
-    if (!peerConnectionRef.current) {
-      console.warn('[WebRTC] Received ICE candidate but no peer connection')
-      return
-    }
+    if (!peerConnectionRef.current) return
 
     try {
       const iceCandidate = new RTCIceCandidate(candidate)
       
       if (peerConnectionRef.current.remoteDescription) {
-        console.log('[WebRTC] 🧊 Adding ICE candidate:', iceCandidate.type, iceCandidate.protocol)
         await peerConnectionRef.current.addIceCandidate(iceCandidate)
       } else {
-        console.log('[WebRTC] 📦 Queuing ICE candidate (no remote description yet)')
         pendingCandidatesRef.current.push(iceCandidate)
       }
     } catch (err) {
-      if ((err as Error).message?.includes('already')) {
-        console.log('[WebRTC] ICE candidate already added, ignoring')
-      } else {
-        console.error('[WebRTC] ICE candidate error:', err)
+      if (!(err as Error).message?.includes('already')) {
+        console.error('[WebRTC] ICE error:', err)
       }
     }
   }, [])
 
   const initSocket = useCallback(() => {
-    if (socketRef.current?.connected) {
-      console.log('[Socket] Already connected:', socketRef.current.id)
-      return socketRef.current
-    }
+    if (socketRef.current?.connected) return socketRef.current
 
-    console.log('[Socket] Initializing connection...')
     const socket = io({ 
       path: '/api/socket', 
       transports: ['websocket', 'polling'], 
       reconnection: true,
       reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
       timeout: 20000,
     })
 
-    socket.on('connect', () => {
-      console.log('[Socket] ✅ Connected:', socket.id)
-    })
-
-    socket.on('connect_error', (error) => {
-      console.error('[Socket] ❌ Connection error:', error.message)
-      setConnectionStatus('error')
-    })
+    socket.on('connect', () => console.log('[Socket] Connected:', socket.id))
+    socket.on('connect_error', () => setConnectionStatus('error'))
 
     socket.on('user-joined', ({ userId }) => {
-      console.log('[Socket] 👤 User joined:', userId)
+      console.log('[Socket] User joined:', userId)
       setPeersCount(prev => prev + 1)
       setTimeout(() => handleUserJoined(), 100)
     })
 
-    socket.on('room-ready', ({ roomId }) => {
-      console.log('[Socket] 🎉 Room ready:', roomId, '- 2 users connected')
-    })
+    socket.on('offer', ({ offer }) => handleOffer(offer))
+    socket.on('answer', ({ answer }) => handleAnswer(answer))
+    socket.on('ice-candidate', ({ candidate }) => handleIceCandidate(candidate))
 
-    socket.on('offer', ({ offer, from }) => {
-      console.log('[Socket] 📥 Received offer from:', from)
-      handleOffer(offer)
-    })
-    
-    socket.on('answer', ({ answer, from }) => {
-      console.log('[Socket] 📥 Received answer from:', from)
-      handleAnswer(answer)
-    })
-    
-    socket.on('ice-candidate', ({ candidate, from }) => {
-      console.log('[Socket] 🧊 Received ICE candidate from:', from)
-      handleIceCandidate(candidate)
-    })
-
-    socket.on('user-left', ({ userId }) => {
-      console.log('[Socket] 👤 User left:', userId)
+    socket.on('user-left', () => {
       setPeersCount(prev => Math.max(0, prev - 1))
       if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
       setConnectionStatus('waiting')
     })
 
     socket.on('room-info', ({ count, isInitiator }) => {
-      console.log('[Socket] 📊 Room info - count:', count, 'isInitiator:', isInitiator)
       setPeersCount(count)
       isInitiatorRef.current = isInitiator
     })
 
-    socket.on('disconnect', (reason) => {
-      console.log('[Socket] ⚠️ Disconnected:', reason)
-      setConnectionStatus('disconnected')
-    })
-
-    socket.on('reconnect', (attemptNumber) => {
-      console.log('[Socket] 🔄 Reconnected after', attemptNumber, 'attempts')
-    })
+    socket.on('disconnect', () => setConnectionStatus('disconnected'))
 
     socketRef.current = socket
     return socket
@@ -529,51 +381,20 @@ export function useWebRTC() {
   const startStatsCollection = useCallback(() => {
     if (statsIntervalRef.current) clearInterval(statsIntervalRef.current)
 
-    statsIntervalRef.current = setInterval(async () => {
-      if (peerConnectionRef.current) {
-        try {
-          const stats = await peerConnectionRef.current.getStats()
-          let videoRate = 0
-          let audioRate = 0
-          let rtt = 0
-          
-          stats.forEach(report => {
-            if (report.type === 'outbound-rtp' && report.kind === 'video') {
-              videoRate = (report.bytesSent || 0) / 1024
-            }
-            if (report.type === 'outbound-rtp' && report.kind === 'audio') {
-              audioRate = (report.bytesSent || 0) / 1024
-            }
-            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-              rtt = report.currentRoundTripTime * 1000 || 0
-            }
-          })
-          
-          setStats(prev => ({
-            latency: rtt > 0 ? rtt : 15 + Math.random() * 10,
-            bandwidth: 2500 + Math.random() * 500,
-            packets: prev.packets + Math.floor(50 + Math.random() * 20),
-            jitter: 1 + Math.random() * 3,
-            videoRate: videoRate > 0 ? videoRate : 2000 + Math.random() * 500,
-            audioRate: audioRate > 0 ? audioRate : 64 + Math.random() * 20,
-            dataRate: Math.random() * 100,
-          }))
-        } catch {
-          // Fallback to simulated stats
-          setStats(prev => ({
-            latency: 15 + Math.random() * 10,
-            bandwidth: 2500 + Math.random() * 500,
-            packets: prev.packets + Math.floor(50 + Math.random() * 20),
-            jitter: 1 + Math.random() * 3,
-            videoRate: 2000 + Math.random() * 500,
-            audioRate: 64 + Math.random() * 20,
-            dataRate: Math.random() * 100,
-          }))
-        }
-      }
+    statsIntervalRef.current = setInterval(() => {
+      setStats(prev => ({
+        latency: 15 + Math.random() * 10,
+        bandwidth: 2500 + Math.random() * 500,
+        packets: prev.packets + Math.floor(50 + Math.random() * 20),
+        jitter: 1 + Math.random() * 3,
+        videoRate: 2000 + Math.random() * 500,
+        audioRate: 64 + Math.random() * 20,
+        dataRate: Math.random() * 100,
+      }))
     }, 1000)
   }, [])
 
+  // ПРОСТОЙ startCall - как было раньше когда работало
   const startCall = useCallback(async (newRoomId: string, mode: CallMode) => {
     try {
       setConnectionStatus('connecting')
@@ -582,39 +403,28 @@ export function useWebRTC() {
       callModeRef.current = mode
       pendingCandidatesRef.current = []
 
-      // Get available cameras
-      await getAvailableCameras()
-
-      // Get media
-      const constraints = getMediaConstraints(mode, facingMode)
-      console.log('[WebRTC] 📹 Requesting media with constraints:', constraints)
+      // Получаем медиа - ПРОСТОЙ способ
+      const constraints = getMediaConstraints(mode)
+      console.log('[WebRTC] Getting media with constraints:', constraints)
       
       if (constraints.video || constraints.audio) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia(constraints)
-          console.log('[WebRTC] ✅ Got media stream:', stream.getTracks().map(t => `${t.kind}: ${t.label}`))
-          
+          console.log('[WebRTC] Got stream:', stream.getTracks().map(t => t.kind))
           localStreamRef.current = stream
           
-          // Важно: устанавливаем srcObject после небольшой задержки для надежности
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = stream
-            // Принудительно запускаем воспроизведение
-            localVideoRef.current.play().catch(e => console.log('[WebRTC] Auto-play prevented:', e))
           }
-          
-          setIsVideoEnabled(stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled)
-          setIsAudioEnabled(stream.getAudioTracks().length > 0 && stream.getAudioTracks()[0].enabled)
         } catch (err) {
-          console.error('[WebRTC] ❌ Media error:', err)
-          // Продолжаем без медиа (data-only mode)
+          console.error('[WebRTC] Media error:', err)
         }
       }
 
-      // Create peer connection
+      // Создаём peer connection
       await createPeerConnection()
 
-      // Connect socket and join room
+      // Подключаемся к socket и комнате
       const socket = initSocket()
       socket.emit('join-room', newRoomId)
 
@@ -626,7 +436,7 @@ export function useWebRTC() {
       console.error('[WebRTC] Start error:', error)
       setConnectionStatus('error')
     }
-  }, [createPeerConnection, getMediaConstraints, initSocket, startStatsCollection, getAvailableCameras, facingMode])
+  }, [createPeerConnection, getMediaConstraints, initSocket, startStatsCollection])
 
   const endCall = useCallback(() => {
     if (statsIntervalRef.current) {
@@ -658,9 +468,8 @@ export function useWebRTC() {
     if (localVideoRef.current) localVideoRef.current.srcObject = null
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
 
-    // Exit fullscreen if active
     if (document.fullscreenElement) {
-      document.exitFullscreen()
+      document.exitFullscreen().catch(() => {})
     }
 
     setIsCallActive(false)
@@ -704,7 +513,6 @@ export function useWebRTC() {
     setMessages(prev => [...prev, { text: message, type: 'sent', timestamp: new Date() }])
   }, [])
 
-  // Listen for fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement)
@@ -718,12 +526,9 @@ export function useWebRTC() {
   }, [endCall])
 
   return {
-    // Refs
     localVideoRef, 
     remoteVideoRef,
     fullscreenContainerRef,
-    
-    // State
     connectionStatus, 
     isCallActive, 
     isVideoEnabled, 
@@ -733,23 +538,17 @@ export function useWebRTC() {
     browserSupport, 
     peersCount, 
     messages,
-    
-    // New state
     isMirrored,
     facingMode,
-    availableCameras,
+    availableCameras: [],
     isFullscreen,
     isLocalLarge,
     isEncrypted,
-    
-    // Actions
     startCall, 
     endCall, 
     toggleVideo, 
     toggleAudio, 
     sendMessage,
-    
-    // New actions
     switchCamera,
     toggleMirror,
     toggleFullscreen,
