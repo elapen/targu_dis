@@ -5,12 +5,12 @@
 - **SSH:** `ssh -p 7000 bekzat@shyrak.kz`
 - **Путь:** `~/projects/targu_dis`
 - **Порт:** 3003
-- **PM2:** `targu`
+- **Запуск:** Docker Compose
 
-## ⚡ Быстрое обновление
+## ⚡ Быстрое обновление (Docker)
 
 ```bash
-ssh -p 7000 bekzat@shyrak.kz "source ~/.nvm/nvm.sh && cd ~/projects/targu_dis && git pull && npm install && npm run build && pm2 restart targu"
+ssh -p 7000 bekzat@shyrak.kz "cd ~/projects/targu_dis && git pull && docker compose down && docker compose up -d --build"
 ```
 
 ## 📋 Команды на сервере
@@ -19,42 +19,40 @@ ssh -p 7000 bekzat@shyrak.kz "source ~/.nvm/nvm.sh && cd ~/projects/targu_dis &&
 # Подключение
 ssh -p 7000 bekzat@shyrak.kz
 
-# Активировать Node.js
-source ~/.nvm/nvm.sh
-
 # Перейти в проект
 cd ~/projects/targu_dis
 
 # Обновить код
 git pull
 
-# Установить зависимости (если изменились)
-npm install
+# Пересобрать и запустить Docker
+docker compose down
+docker compose up -d --build
 
-# Пересобрать (обязательно после изменений)
-npm run build
+# Логи контейнера
+docker logs convergence-app -f
 
-# Перезапустить
-pm2 restart targu
+# Статус контейнера
+docker ps | grep convergence
 
-# Логи
-pm2 logs targu
-
-# Статус
-pm2 status
+# Перезапустить контейнер
+docker compose restart
 ```
 
 ## 📁 Структура
 
 ```
 ~/projects/targu_dis/
-├── .env          # Переменные окружения (PORT=3003)
-├── server.js     # Сервер + Socket.IO
-├── .next/        # Сборка Next.js
-└── src/          # Исходники
+├── docker-compose.yml  # Конфигурация Docker
+├── Dockerfile          # Сборка образа
+├── server.js           # Сервер + Socket.IO
+├── .next/              # Сборка Next.js
+└── src/                # Исходники
 ```
 
 ## 🔧 Конфигурация
+
+**Docker Compose:** Порт 3003, автоперезапуск
 
 **Nginx:** `/etc/nginx/sites-available/targu.conf`
 ```bash
@@ -73,7 +71,6 @@ sudo certbot certificates
 
 ## ⚠️ Важно
 
-1. **После git pull** — всегда делай `npm run build`
-2. **После npm install** — всегда делай `npm run build`  
-3. **.env** не в git — создаётся вручную на сервере
-4. **Node.js** через nvm — сначала `source ~/.nvm/nvm.sh`
+1. **После git pull** — всегда делай `docker compose up -d --build`
+2. **Docker** автоматически перезапускается при падении
+3. **Логи** смотреть через `docker logs convergence-app -f`
