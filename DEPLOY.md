@@ -1,5 +1,17 @@
 # 🚀 Деплой и обновление
 
+## 🔐 Доступ к приложению
+
+**Пароль по умолчанию:** `convergence2024`
+
+Для изменения пароля на сервере:
+```bash
+ssh -p 7000 bekzat@shyrak.kz
+cd ~/projects/targu_dis
+echo 'APP_ACCESS_PASSWORD=ваш_новый_пароль' > .env
+docker compose restart
+```
+
 ## Сервер
 - **Домен:** https://targu.shyrak.kz
 - **SSH:** `ssh -p 7000 bekzat@shyrak.kz`
