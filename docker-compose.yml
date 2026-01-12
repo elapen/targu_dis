@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  convergence-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: convergence-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    networks:
+      - convergence-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  convergence-network:
+    driver: bridge
