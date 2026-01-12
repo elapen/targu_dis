@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  
+  <!-- Central convergent circle -->
+  <circle cx="256" cy="256" r="120" fill="none" stroke="url(#accent)" stroke-width="12" opacity="0.3"/>
+  <circle cx="256" cy="256" r="80" fill="url(#accent)" opacity="0.2"/>
+  
+  <!-- Three converging elements -->
+  <!-- Video (red) -->
+  <circle cx="180" cy="180" r="45" fill="#ef4444" opacity="0.9"/>
+  <path d="M165 180 L195 160 V200 Z" fill="white"/>
+  
+  <!-- Audio (green) -->
+  <circle cx="332" cy="180" r="45" fill="#22c55e" opacity="0.9"/>
+  <rect x="312" y="160" width="8" height="40" rx="4" fill="white"/>
+  <rect x="328" y="150" width="8" height="60" rx="4" fill="white"/>
+  <rect x="344" y="165" width="8" height="30" rx="4" fill="white"/>
+  
+  <!-- Data (blue) -->
+  <circle cx="256" cy="340" r="45" fill="#3b82f6" opacity="0.9"/>
+  <rect x="236" y="320" width="40" height="40" rx="4" fill="none" stroke="white" stroke-width="4"/>
+  <circle cx="256" cy="340" r="8" fill="white"/>
+  
+  <!-- Connection lines to center -->
+  <line x1="210" y1="210" x2="240" y2="240" stroke="#ef4444" stroke-width="4" stroke-linecap="round"/>
+  <line x1="302" y1="210" x2="272" y2="240" stroke="#22c55e" stroke-width="4" stroke-linecap="round"/>
+  <line x1="256" y1="295" x2="256" y2="272" stroke="#3b82f6" stroke-width="4" stroke-linecap="round"/>
+  
+  <!-- Center dot -->
+  <circle cx="256" cy="256" r="16" fill="url(#accent)"/>
+</svg>
