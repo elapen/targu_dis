@@ -6,11 +6,32 @@ import { Header } from '@/components/layout/header'
 import { DemoSection } from '@/components/sections/demo-section'
 import { TheorySection } from '@/components/sections/theory-section'
 import { ArchitectureSection } from '@/components/sections/architecture-section'
-import { Video, BookOpen, Layers } from 'lucide-react'
+import { LoginScreen } from '@/components/auth/login-screen'
+import { useAuth } from '@/contexts/auth-context'
+import { Video, BookOpen, Layers, Loader2 } from 'lucide-react'
 
 export default function Home() {
+  const { isAuthenticated, isLoading } = useAuth()
   const [activeTab, setActiveTab] = useState('demo')
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen animated-gradient flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground">Жүктелуде...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Not authenticated - show login
+  if (!isAuthenticated) {
+    return <LoginScreen />
+  }
+
+  // Authenticated - show main app
   return (
     <main className="min-h-screen animated-gradient">
       <Header />

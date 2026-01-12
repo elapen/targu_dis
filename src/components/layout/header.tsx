@@ -1,8 +1,16 @@
 'use client'
 
-import { Phone, Wifi } from 'lucide-react'
+import { Phone, Wifi, LogOut, ShieldCheck } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useAuth } from '@/contexts/auth-context'
 
 export function Header() {
+  const { logout, isAuthenticated } = useAuth()
+
+  const handleLogout = async () => {
+    await logout()
+  }
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-card/80 backdrop-blur-lg">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -23,11 +31,31 @@ export function Header() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 sm:gap-4">
+          {/* Security badge */}
+          <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-500/10 text-green-500 text-xs">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>E2E</span>
+          </div>
+
+          {/* WebRTC status */}
           <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             <span>WebRTC</span>
           </div>
+
+          {/* Logout button */}
+          {isAuthenticated && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleLogout}
+              className="gap-1.5 text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Шығу</span>
+            </Button>
+          )}
         </div>
       </div>
     </header>

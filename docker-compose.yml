@@ -10,6 +10,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3003
+      - APP_ACCESS_PASSWORD=${APP_ACCESS_PASSWORD:-convergence2024}
     networks:
       - convergence-network
     healthcheck:

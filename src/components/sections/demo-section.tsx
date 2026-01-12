@@ -7,7 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toaster'
-import { Video, VideoOff, Mic, MicOff, PhoneOff, MessageSquare, Send, Copy, Users, Loader2, CheckCircle, XCircle, Clock, Plus, LogIn, ArrowLeft } from 'lucide-react'
+import { 
+  Video, VideoOff, Mic, MicOff, PhoneOff, MessageSquare, Send, Copy, Users, Loader2, 
+  CheckCircle, XCircle, Clock, Plus, LogIn, ArrowLeft, SwitchCamera, FlipHorizontal2,
+  Maximize, Minimize, Shield, ShieldCheck, ArrowLeftRight
+} from 'lucide-react'
 import { NetworkDiagram } from '@/components/diagrams/network-diagram'
 import { DataFlowVisualization } from '@/components/diagrams/data-flow'
 import { cn } from '@/lib/utils'
@@ -19,7 +23,6 @@ const callModes: { value: CallMode; label: string; icon: React.ReactNode }[] = [
   { value: 'all', label: 'Барлығы', icon: <Users className="w-4 h-4 sm:w-5 sm:h-5" /> },
 ]
 
-// Генерация 4-значного ID
 const generateRoomId = () => Math.floor(1000 + Math.random() * 9000).toString()
 
 type RoomMode = 'select' | 'create' | 'join'
@@ -34,11 +37,14 @@ export function DemoSection() {
   const [chatOpen, setChatOpen] = useState(false)
 
   const {
-    localVideoRef, remoteVideoRef, connectionStatus, isCallActive, isVideoEnabled, isAudioEnabled,
-    roomId, stats, browserSupport, peersCount, startCall, endCall, toggleVideo, toggleAudio, sendMessage, messages,
+    localVideoRef, remoteVideoRef, fullscreenContainerRef, connectionStatus, isCallActive, 
+    isVideoEnabled, isAudioEnabled, roomId, stats, browserSupport, peersCount, 
+    startCall, endCall, toggleVideo, toggleAudio, sendMessage, messages,
+    // New features
+    isMirrored, facingMode, isFullscreen, isLocalLarge, isEncrypted,
+    switchCamera, toggleMirror, toggleFullscreen, swapVideos,
   } = useWebRTC()
 
-  // Fix hydration - wait for client mount
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -115,7 +121,17 @@ export function DemoSection() {
     )
   }
 
-  // Loading state during hydration
+  // Encryption badge
+  const EncryptionBadge = () => (
+    <div className={cn(
+      'inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] sm:text-xs font-medium',
+      isEncrypted ? 'bg-green-500/10 text-green-500' : 'bg-muted text-muted-foreground'
+    )}>
+      {isEncrypted ? <ShieldCheck className="w-3 h-3" /> : <Shield className="w-3 h-3" />}
+      <span className="hidden sm:inline">{isEncrypted ? 'E2E Шифрлеу' : 'Шифрленбеген'}</span>
+    </div>
+  )
+
   if (!mounted) {
     return (
       <div className="flex flex-col gap-4 lg:gap-6">
@@ -137,6 +153,177 @@ export function DemoSection() {
     )
   }
 
+  // Fullscreen video layout
+  const VideoContainer = () => {
+    const localVideoClasses = cn(
+      "bg-muted overflow-hidden transition-all duration-300",
+      isMirrored && "scale-x-[-1]",
+      isFullscreen 
+        ? isLocalLarge 
+          ? "w-full h-full rounded-none" 
+          : "absolute bottom-4 right-4 w-32 h-24 sm:w-48 sm:h-36 rounded-xl border-2 border-white/30 shadow-2xl z-10 cursor-pointer hover:scale-105"
+        : "relative aspect-video rounded-lg sm:rounded-xl border-2 border-primary/20"
+    )
+
+    const remoteVideoClasses = cn(
+      "bg-muted overflow-hidden transition-all duration-300",
+      isFullscreen 
+        ? !isLocalLarge 
+          ? "w-full h-full rounded-none" 
+          : "absolute bottom-4 right-4 w-32 h-24 sm:w-48 sm:h-36 rounded-xl border-2 border-white/30 shadow-2xl z-10 cursor-pointer hover:scale-105"
+        : "relative aspect-video rounded-lg sm:rounded-xl border-2 border-secondary"
+    )
+
+    return (
+      <div 
+        ref={fullscreenContainerRef}
+        className={cn(
+          "relative",
+          isFullscreen 
+            ? "fixed inset-0 z-50 bg-black flex items-center justify-center" 
+            : "grid grid-cols-2 gap-2 sm:gap-4"
+        )}
+      >
+        {/* Local Video */}
+        <div 
+          className={localVideoClasses}
+          onClick={isFullscreen && !isLocalLarge ? swapVideos : undefined}
+        >
+          <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+          {!isFullscreen && (
+            <div className="absolute bottom-0 inset-x-0 p-1.5 sm:p-2 bg-gradient-to-t from-black/60">
+              <p className="text-[10px] sm:text-xs text-white font-medium">Сіз</p>
+            </div>
+          )}
+          {!isVideoEnabled && isCallActive && (
+            <div className="absolute inset-0 flex items-center justify-center bg-muted">
+              <VideoOff className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground" />
+            </div>
+          )}
+          {isFullscreen && !isLocalLarge && (
+            <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 rounded text-[10px] text-white">Сіз</div>
+          )}
+        </div>
+
+        {/* Remote Video */}
+        <div 
+          className={remoteVideoClasses}
+          onClick={isFullscreen && isLocalLarge ? swapVideos : undefined}
+        >
+          <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+          {!isFullscreen && (
+            <div className="absolute bottom-0 inset-x-0 p-1.5 sm:p-2 bg-gradient-to-t from-black/60">
+              <p className="text-[10px] sm:text-xs text-white font-medium">Әріптес</p>
+            </div>
+          )}
+          {connectionStatus !== 'connected' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/90 gap-2">
+              {connectionStatus === 'waiting' ? (
+                <>
+                  <div className="relative">
+                    <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-full border-2 border-primary/30 animate-ping absolute" />
+                    <Users className="w-8 h-8 sm:w-12 sm:h-12 text-primary/50" />
+                  </div>
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">Күтуде...</p>
+                </>
+              ) : connectionStatus === 'connecting' ? (
+                <>
+                  <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin text-primary" />
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">Қосылуда...</p>
+                </>
+              ) : (
+                <p className="text-[10px] sm:text-sm text-muted-foreground">Байланыс жоқ</p>
+              )}
+            </div>
+          )}
+          {isFullscreen && isLocalLarge && (
+            <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 rounded text-[10px] text-white">Әріптес</div>
+          )}
+        </div>
+
+        {/* Fullscreen Controls Overlay */}
+        {isFullscreen && (
+          <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              {/* Video toggle */}
+              <Button
+                variant={isVideoEnabled ? 'secondary' : 'destructive'}
+                size="lg"
+                onClick={toggleVideo}
+                disabled={selectedMode === 'audio' || selectedMode === 'data'}
+                className="w-14 h-14 rounded-full p-0"
+              >
+                {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
+              </Button>
+
+              {/* Audio toggle */}
+              <Button
+                variant={isAudioEnabled ? 'secondary' : 'destructive'}
+                size="lg"
+                onClick={toggleAudio}
+                disabled={selectedMode === 'data'}
+                className="w-14 h-14 rounded-full p-0"
+              >
+                {isAudioEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+              </Button>
+
+              {/* Switch camera */}
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={switchCamera}
+                className="w-14 h-14 rounded-full p-0"
+              >
+                <SwitchCamera className="w-6 h-6" />
+              </Button>
+
+              {/* Swap videos */}
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={swapVideos}
+                className="w-14 h-14 rounded-full p-0"
+              >
+                <ArrowLeftRight className="w-6 h-6" />
+              </Button>
+
+              {/* End call */}
+              <Button 
+                variant="destructive" 
+                size="lg" 
+                onClick={handleEndCall} 
+                className="h-14 px-8 rounded-full"
+              >
+                <PhoneOff className="w-6 h-6 mr-2" />
+                Аяқтау
+              </Button>
+
+              {/* Exit fullscreen */}
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={toggleFullscreen}
+                className="w-14 h-14 rounded-full p-0"
+              >
+                <Minimize className="w-6 h-6" />
+              </Button>
+            </div>
+
+            {/* Room ID and status */}
+            <div className="flex items-center justify-center gap-4 text-white">
+              <div className="text-sm">
+                <span className="text-white/60">ID:</span> 
+                <span className="font-mono font-bold ml-1">{generatedRoomId || roomId}</span>
+              </div>
+              <EncryptionBadge />
+              <StatusBadge />
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 lg:gap-6">
       {/* Video Call Panel */}
@@ -144,55 +331,17 @@ export function DemoSection() {
         <CardHeader className="p-4 sm:p-6 space-y-1">
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-base sm:text-xl">Видео байланыс</CardTitle>
-            <StatusBadge />
+            <div className="flex items-center gap-2">
+              {isCallActive && <EncryptionBadge />}
+              <StatusBadge />
+            </div>
           </div>
-          <CardDescription className="text-xs sm:text-sm">P2P байланыс орнатыңыз</CardDescription>
+          <CardDescription className="text-xs sm:text-sm">P2P E2E шифрленген байланыс</CardDescription>
         </CardHeader>
 
         <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-4 sm:space-y-6">
           {/* Video Grid */}
-          <div className="grid grid-cols-2 gap-2 sm:gap-4">
-            {/* Local Video */}
-            <div className="relative aspect-video rounded-lg sm:rounded-xl overflow-hidden bg-muted border-2 border-primary/20">
-              <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-              <div className="absolute bottom-0 inset-x-0 p-1.5 sm:p-2 bg-gradient-to-t from-black/60">
-                <p className="text-[10px] sm:text-xs text-white font-medium">Сіз</p>
-              </div>
-              {!isVideoEnabled && isCallActive && (
-                <div className="absolute inset-0 flex items-center justify-center bg-muted">
-                  <VideoOff className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground" />
-                </div>
-              )}
-            </div>
-
-            {/* Remote Video */}
-            <div className="relative aspect-video rounded-lg sm:rounded-xl overflow-hidden bg-muted border-2 border-secondary">
-              <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-              <div className="absolute bottom-0 inset-x-0 p-1.5 sm:p-2 bg-gradient-to-t from-black/60">
-                <p className="text-[10px] sm:text-xs text-white font-medium">Әріптес</p>
-              </div>
-              {connectionStatus !== 'connected' && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/90 gap-2">
-                  {connectionStatus === 'waiting' ? (
-                    <>
-                      <div className="relative">
-                        <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-full border-2 border-primary/30 animate-ping absolute" />
-                        <Users className="w-8 h-8 sm:w-12 sm:h-12 text-primary/50" />
-                      </div>
-                      <p className="text-[10px] sm:text-sm text-muted-foreground">Күтуде...</p>
-                    </>
-                  ) : connectionStatus === 'connecting' ? (
-                    <>
-                      <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin text-primary" />
-                      <p className="text-[10px] sm:text-sm text-muted-foreground">Қосылуда...</p>
-                    </>
-                  ) : (
-                    <p className="text-[10px] sm:text-sm text-muted-foreground">Байланыс жоқ</p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          <VideoContainer />
 
           {/* Room Selection / Join UI */}
           {!isCallActive ? (
@@ -336,74 +485,133 @@ export function DemoSection() {
           )}
 
           {/* Controls */}
-          {isCallActive && (
-            <div className="flex items-center justify-center gap-2 sm:gap-3">
-              <Button
-                variant={isVideoEnabled ? 'outline' : 'destructive'}
-                size="lg"
-                onClick={toggleVideo}
-                disabled={selectedMode === 'audio' || selectedMode === 'data'}
-                className="w-11 h-11 sm:w-14 sm:h-14 rounded-full p-0"
-              >
-                {isVideoEnabled ? <Video className="w-5 h-5 sm:w-6 sm:h-6" /> : <VideoOff className="w-5 h-5 sm:w-6 sm:h-6" />}
-              </Button>
+          {isCallActive && !isFullscreen && (
+            <div className="space-y-3">
+              {/* Main controls */}
+              <div className="flex items-center justify-center gap-2 sm:gap-3">
+                <Button
+                  variant={isVideoEnabled ? 'outline' : 'destructive'}
+                  size="lg"
+                  onClick={toggleVideo}
+                  disabled={selectedMode === 'audio' || selectedMode === 'data'}
+                  className="w-11 h-11 sm:w-14 sm:h-14 rounded-full p-0"
+                  title="Видео қосу/өшіру"
+                >
+                  {isVideoEnabled ? <Video className="w-5 h-5 sm:w-6 sm:h-6" /> : <VideoOff className="w-5 h-5 sm:w-6 sm:h-6" />}
+                </Button>
 
-              <Button
-                variant={isAudioEnabled ? 'outline' : 'destructive'}
-                size="lg"
-                onClick={toggleAudio}
-                disabled={selectedMode === 'data'}
-                className="w-11 h-11 sm:w-14 sm:h-14 rounded-full p-0"
-              >
-                {isAudioEnabled ? <Mic className="w-5 h-5 sm:w-6 sm:h-6" /> : <MicOff className="w-5 h-5 sm:w-6 sm:h-6" />}
-              </Button>
+                <Button
+                  variant={isAudioEnabled ? 'outline' : 'destructive'}
+                  size="lg"
+                  onClick={toggleAudio}
+                  disabled={selectedMode === 'data'}
+                  className="w-11 h-11 sm:w-14 sm:h-14 rounded-full p-0"
+                  title="Микрофон қосу/өшіру"
+                >
+                  {isAudioEnabled ? <Mic className="w-5 h-5 sm:w-6 sm:h-6" /> : <MicOff className="w-5 h-5 sm:w-6 sm:h-6" />}
+                </Button>
 
-              <Button variant="destructive" size="lg" onClick={handleEndCall} className="h-11 sm:h-14 px-4 sm:px-8 rounded-full">
-                <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2" />
-                <span className="text-xs sm:text-sm">Аяқтау</span>
-              </Button>
+                <Button 
+                  variant="destructive" 
+                  size="lg" 
+                  onClick={handleEndCall} 
+                  className="h-11 sm:h-14 px-4 sm:px-8 rounded-full"
+                >
+                  <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2" />
+                  <span className="text-xs sm:text-sm">Аяқтау</span>
+                </Button>
 
-              <Dialog open={chatOpen} onOpenChange={setChatOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="lg" className="w-11 h-11 sm:w-14 sm:h-14 rounded-full p-0">
-                    <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-[95vw] sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Хабарламалар</DialogTitle>
-                  </DialogHeader>
-                  <div className="flex flex-col h-60 sm:h-80">
-                    <div className="flex-1 overflow-y-auto space-y-2 p-2 bg-muted/50 rounded-lg">
-                      {messages.length === 0 ? (
-                        <p className="text-xs sm:text-sm text-muted-foreground text-center py-8">Хабарлама жоқ</p>
-                      ) : (
-                        messages.map((msg, i) => (
-                          <div key={i} className={cn('max-w-[80%] p-2 rounded-lg text-xs sm:text-sm', msg.type === 'sent' ? 'ml-auto bg-primary text-primary-foreground' : 'bg-secondary')}>
-                            {msg.text}
-                          </div>
-                        ))
-                      )}
+                <Dialog open={chatOpen} onOpenChange={setChatOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="lg" className="w-11 h-11 sm:w-14 sm:h-14 rounded-full p-0" title="Чат">
+                      <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-[95vw] sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Хабарламалар</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex flex-col h-60 sm:h-80">
+                      <div className="flex-1 overflow-y-auto space-y-2 p-2 bg-muted/50 rounded-lg">
+                        {messages.length === 0 ? (
+                          <p className="text-xs sm:text-sm text-muted-foreground text-center py-8">Хабарлама жоқ</p>
+                        ) : (
+                          messages.map((msg, i) => (
+                            <div key={i} className={cn('max-w-[80%] p-2 rounded-lg text-xs sm:text-sm', msg.type === 'sent' ? 'ml-auto bg-primary text-primary-foreground' : 'bg-secondary')}>
+                              {msg.text}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <div className="flex gap-2 mt-3">
+                        <Input
+                          placeholder="Хабарлама..."
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && (sendMessage(chatInput.trim()), setChatInput(''))}
+                        />
+                        <Button onClick={() => (sendMessage(chatInput.trim()), setChatInput(''))} disabled={!chatInput.trim()}>
+                          <Send className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-2 mt-3">
-                      <Input
-                        placeholder="Хабарлама..."
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && (sendMessage(chatInput.trim()), setChatInput(''))}
-                      />
-                      <Button onClick={() => (sendMessage(chatInput.trim()), setChatInput(''))} disabled={!chatInput.trim()}>
-                        <Send className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              {/* Secondary controls */}
+              <div className="flex items-center justify-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={switchCamera}
+                  disabled={selectedMode === 'audio' || selectedMode === 'data'}
+                  className="gap-1.5"
+                  title="Камера ауыстыру"
+                >
+                  <SwitchCamera className="w-4 h-4" />
+                  <span className="text-xs hidden sm:inline">{facingMode === 'user' ? 'Артқы' : 'Алдыңғы'}</span>
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleMirror}
+                  disabled={selectedMode === 'audio' || selectedMode === 'data'}
+                  className="gap-1.5"
+                  title="Айна режимі"
+                >
+                  <FlipHorizontal2 className="w-4 h-4" />
+                  <span className="text-xs hidden sm:inline">{isMirrored ? 'Қалыпты' : 'Айна'}</span>
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleFullscreen}
+                  className="gap-1.5"
+                  title="Толық экран"
+                >
+                  <Maximize className="w-4 h-4" />
+                  <span className="text-xs hidden sm:inline">Толық экран</span>
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={swapVideos}
+                  className="gap-1.5"
+                  title="Видео ауыстыру"
+                >
+                  <ArrowLeftRight className="w-4 h-4" />
+                  <span className="text-xs hidden sm:inline">Ауыстыру</span>
+                </Button>
+              </div>
             </div>
           )}
 
           {/* Stats */}
-          {isCallActive && (
+          {isCallActive && !isFullscreen && (
             <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center">
               {[
                 { label: 'Кідіріс', value: `${stats.latency.toFixed(0)}ms`, color: 'text-green-500' },
@@ -422,7 +630,7 @@ export function DemoSection() {
       </Card>
 
       {/* Network Diagram - Hidden on very small screens when call is not active */}
-      <div className={cn("space-y-4", !isCallActive && "hidden sm:block")}>
+      <div className={cn("space-y-4", !isCallActive && "hidden sm:block", isFullscreen && "hidden")}>
         <NetworkDiagram isCallActive={isCallActive} stats={stats} />
         <DataFlowVisualization stats={stats} isActive={isCallActive && connectionStatus === 'connected'} />
       </div>
