@@ -81,6 +81,7 @@ app.prepare().then(() => {
     })
 
     socket.on('ice-candidate', ({ candidate, roomId }) => {
+      console.log(`[Socket] ICE candidate from ${socket.id} in room ${roomId}`)
       socket.to(roomId).emit('ice-candidate', { candidate, from: socket.id })
     })
 
