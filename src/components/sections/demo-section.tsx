@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toaster'
-import { Video, VideoOff, Mic, MicOff, Phone, PhoneOff, MessageSquare, Send, Copy, Users, Loader2, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Video, VideoOff, Mic, MicOff, Phone, PhoneOff, MessageSquare, Send, Copy, Users, Loader2, CheckCircle, XCircle, Clock, Plus, LogIn, ArrowLeft } from 'lucide-react'
 import { NetworkDiagram } from '@/components/diagrams/network-diagram'
 import { DataFlowVisualization } from '@/components/diagrams/data-flow'
 import { cn } from '@/lib/utils'
@@ -19,9 +19,18 @@ const callModes: { value: CallMode; label: string; icon: React.ReactNode; desc: 
   { value: 'all', label: 'Барлығы', icon: <Users className="w-5 h-5" />, desc: 'Конвергенция' },
 ]
 
+// Генерация 4-значного ID
+const generateRoomId = () => {
+  return Math.floor(1000 + Math.random() * 9000).toString()
+}
+
+type RoomMode = 'select' | 'create' | 'join'
+
 export function DemoSection() {
   const [selectedMode, setSelectedMode] = useState<CallMode>('video')
+  const [roomMode, setRoomMode] = useState<RoomMode>('select')
   const [roomInput, setRoomInput] = useState('')
+  const [generatedRoomId, setGeneratedRoomId] = useState<string | null>(null)
   const [chatInput, setChatInput] = useState('')
   const [chatOpen, setChatOpen] = useState(false)
 
@@ -30,29 +39,61 @@ export function DemoSection() {
     roomId, stats, browserSupport, peersCount, startCall, endCall, toggleVideo, toggleAudio, sendMessage, messages,
   } = useWebRTC()
 
-  const handleStartCall = async () => {
-    const room = roomInput.trim() || `room-${Math.random().toString(36).substr(2, 6)}`
-    setRoomInput(room)
+  // Создать комнату
+  const handleCreateRoom = async () => {
+    const newRoomId = generateRoomId()
+    setGeneratedRoomId(newRoomId)
 
     if (!browserSupport.webrtc) {
       toast({ title: 'WebRTC қолдамайды', description: 'Басқа браузер қолданыңыз', variant: 'destructive' })
       return
     }
 
-    await startCall(room, selectedMode)
-    toast({ title: 'Бөлмеге қосылуда', description: `ID: ${room}` })
+    await startCall(newRoomId, selectedMode)
+    toast({ title: 'Бөлме жасалды', description: `ID: ${newRoomId}` })
+  }
+
+  // Присоединиться к комнате
+  const handleJoinRoom = async () => {
+    if (roomInput.length !== 4 || !/^\d{4}$/.test(roomInput)) {
+      toast({ title: 'Қате ID', description: '4 санды енгізіңіз', variant: 'destructive' })
+      return
+    }
+
+    if (!browserSupport.webrtc) {
+      toast({ title: 'WebRTC қолдамайды', description: 'Басқа браузер қолданыңыз', variant: 'destructive' })
+      return
+    }
+
+    await startCall(roomInput, selectedMode)
+    toast({ title: 'Бөлмеге қосылуда', description: `ID: ${roomInput}` })
   }
 
   const handleEndCall = () => {
     endCall()
+    setRoomMode('select')
+    setGeneratedRoomId(null)
+    setRoomInput('')
     toast({ title: 'Байланыс аяқталды' })
   }
 
+  const handleBack = () => {
+    setRoomMode('select')
+    setRoomInput('')
+  }
+
   const copyRoomId = () => {
-    if (roomId) {
-      navigator.clipboard.writeText(roomId)
-      toast({ title: 'Көшірілді!', description: roomId })
+    const id = generatedRoomId || roomId
+    if (id) {
+      navigator.clipboard.writeText(id)
+      toast({ title: 'Көшірілді!', description: id })
     }
+  }
+
+  // Обработка ввода только цифр
+  const handleRoomInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 4)
+    setRoomInput(value)
   }
 
   const StatusBadge = () => {
@@ -133,124 +174,212 @@ export function DemoSection() {
             </div>
           </div>
 
-          {/* Room ID Input */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Бөлме ID</label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Бөлме ID енгізіңіз немесе бос қалдырыңыз"
-                value={roomInput}
-                onChange={(e) => setRoomInput(e.target.value)}
-                disabled={isCallActive}
-              />
-              {roomId && (
-                <Button variant="outline" size="icon" onClick={copyRoomId} title="Көшіру">
-                  <Copy className="w-4 h-4" />
-                </Button>
+          {/* Room Selection / Join UI */}
+          {!isCallActive ? (
+            <div className="space-y-4">
+              {roomMode === 'select' && (
+                <>
+                  {/* Mode Selector */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Байланыс түрі</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {callModes.map((mode) => (
+                        <button
+                          key={mode.value}
+                          onClick={() => setSelectedMode(mode.value)}
+                          className={cn(
+                            'flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all',
+                            selectedMode === mode.value
+                              ? 'border-primary bg-primary/5 text-primary'
+                              : 'border-border hover:border-primary/30'
+                          )}
+                        >
+                          {mode.icon}
+                          <span className="text-xs font-medium">{mode.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Create or Join Buttons */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <Button
+                      size="lg"
+                      onClick={() => { setRoomMode('create'); handleCreateRoom(); }}
+                      disabled={!browserSupport.webrtc}
+                      className="h-16 rounded-xl bg-green-600 hover:bg-green-700 flex flex-col gap-1"
+                    >
+                      <Plus className="w-6 h-6" />
+                      <span className="text-sm">Бөлме жасау</span>
+                    </Button>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={() => setRoomMode('join')}
+                      disabled={!browserSupport.webrtc}
+                      className="h-16 rounded-xl flex flex-col gap-1"
+                    >
+                      <LogIn className="w-6 h-6" />
+                      <span className="text-sm">Қосылу</span>
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {roomMode === 'join' && (
+                <div className="space-y-4">
+                  <Button variant="ghost" size="sm" onClick={handleBack} className="mb-2">
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Артқа
+                  </Button>
+
+                  {/* Mode Selector */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Байланыс түрі</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {callModes.map((mode) => (
+                        <button
+                          key={mode.value}
+                          onClick={() => setSelectedMode(mode.value)}
+                          className={cn(
+                            'flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all',
+                            selectedMode === mode.value
+                              ? 'border-primary bg-primary/5 text-primary'
+                              : 'border-border hover:border-primary/30'
+                          )}
+                        >
+                          {mode.icon}
+                          <span className="text-xs font-medium">{mode.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Room ID Input */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Бөлме ID (4 сан)</label>
+                    <Input
+                      placeholder="1234"
+                      value={roomInput}
+                      onChange={handleRoomInputChange}
+                      className="text-center text-2xl font-mono tracking-widest h-14"
+                      maxLength={4}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                    />
+                  </div>
+
+                  <Button
+                    size="lg"
+                    onClick={handleJoinRoom}
+                    disabled={roomInput.length !== 4}
+                    className="w-full h-14 rounded-xl bg-blue-600 hover:bg-blue-700"
+                  >
+                    <LogIn className="w-5 h-5 mr-2" />
+                    Қосылу
+                  </Button>
+                </div>
               )}
             </div>
-            {roomId && (
-              <p className="text-xs text-muted-foreground">
-                Бөлме: <span className="font-mono text-primary">{roomId}</span> - осы ID-ді әріптесіңізге жіберіңіз
-              </p>
-            )}
-          </div>
+          ) : (
+            <>
+              {/* Room ID Display */}
+              <div className="p-4 rounded-xl bg-primary/5 border-2 border-primary/20 text-center space-y-2">
+                <p className="text-sm text-muted-foreground">Бөлме ID</p>
+                <div className="flex items-center justify-center gap-3">
+                  <span className="text-4xl font-mono font-bold tracking-widest text-primary">
+                    {generatedRoomId || roomId}
+                  </span>
+                  <Button variant="outline" size="icon" onClick={copyRoomId} title="Көшіру">
+                    <Copy className="w-5 h-5" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Осы ID-ді әріптесіңізге жіберіңіз
+                </p>
+              </div>
 
-          {/* Mode Selector */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Байланыс түрі</label>
-            <div className="grid grid-cols-4 gap-2">
-              {callModes.map((mode) => (
-                <button
-                  key={mode.value}
-                  onClick={() => setSelectedMode(mode.value)}
-                  disabled={isCallActive}
-                  className={cn(
-                    'flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all',
-                    selectedMode === mode.value
-                      ? 'border-primary bg-primary/5 text-primary'
-                      : 'border-border hover:border-primary/30',
-                    isCallActive && 'opacity-50 cursor-not-allowed'
-                  )}
-                >
-                  {mode.icon}
-                  <span className="text-xs font-medium">{mode.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+              {/* Mode Display */}
+              <div className="flex justify-center">
+                <div className={cn(
+                  'inline-flex items-center gap-2 px-4 py-2 rounded-full border-2',
+                  'border-primary/30 bg-primary/5 text-primary'
+                )}>
+                  {callModes.find(m => m.value === selectedMode)?.icon}
+                  <span className="text-sm font-medium">
+                    {callModes.find(m => m.value === selectedMode)?.label}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Controls */}
-          <div className="flex items-center justify-center gap-3">
-            <Button
-              variant={isVideoEnabled ? 'outline' : 'destructive'}
-              size="lg"
-              onClick={toggleVideo}
-              disabled={!isCallActive || selectedMode === 'audio' || selectedMode === 'data'}
-              className="w-14 h-14 rounded-full p-0"
-            >
-              {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
-            </Button>
-
-            <Button
-              variant={isAudioEnabled ? 'outline' : 'destructive'}
-              size="lg"
-              onClick={toggleAudio}
-              disabled={!isCallActive || selectedMode === 'data'}
-              className="w-14 h-14 rounded-full p-0"
-            >
-              {isAudioEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
-            </Button>
-
-            {!isCallActive ? (
-              <Button size="lg" onClick={handleStartCall} disabled={!browserSupport.webrtc} className="h-14 px-8 rounded-full bg-green-600 hover:bg-green-700">
-                <Phone className="w-5 h-5 mr-2" />
-                Бастау
+          {isCallActive && (
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                variant={isVideoEnabled ? 'outline' : 'destructive'}
+                size="lg"
+                onClick={toggleVideo}
+                disabled={selectedMode === 'audio' || selectedMode === 'data'}
+                className="w-14 h-14 rounded-full p-0"
+              >
+                {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
               </Button>
-            ) : (
+
+              <Button
+                variant={isAudioEnabled ? 'outline' : 'destructive'}
+                size="lg"
+                onClick={toggleAudio}
+                disabled={selectedMode === 'data'}
+                className="w-14 h-14 rounded-full p-0"
+              >
+                {isAudioEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+              </Button>
+
               <Button variant="destructive" size="lg" onClick={handleEndCall} className="h-14 px-8 rounded-full">
                 <PhoneOff className="w-5 h-5 mr-2" />
                 Аяқтау
               </Button>
-            )}
 
-            <Dialog open={chatOpen} onOpenChange={setChatOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="lg" disabled={!isCallActive} className="w-14 h-14 rounded-full p-0">
-                  <MessageSquare className="w-6 h-6" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Хабарламалар</DialogTitle>
-                </DialogHeader>
-                <div className="flex flex-col h-80">
-                  <div className="flex-1 overflow-y-auto space-y-2 p-2 bg-muted/50 rounded-lg">
-                    {messages.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-8">Хабарлама жоқ</p>
-                    ) : (
-                      messages.map((msg, i) => (
-                        <div key={i} className={cn('max-w-[80%] p-2 rounded-lg text-sm', msg.type === 'sent' ? 'ml-auto bg-primary text-primary-foreground' : 'bg-secondary')}>
-                          {msg.text}
-                        </div>
-                      ))
-                    )}
+              <Dialog open={chatOpen} onOpenChange={setChatOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="lg" className="w-14 h-14 rounded-full p-0">
+                    <MessageSquare className="w-6 h-6" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Хабарламалар</DialogTitle>
+                  </DialogHeader>
+                  <div className="flex flex-col h-80">
+                    <div className="flex-1 overflow-y-auto space-y-2 p-2 bg-muted/50 rounded-lg">
+                      {messages.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-8">Хабарлама жоқ</p>
+                      ) : (
+                        messages.map((msg, i) => (
+                          <div key={i} className={cn('max-w-[80%] p-2 rounded-lg text-sm', msg.type === 'sent' ? 'ml-auto bg-primary text-primary-foreground' : 'bg-secondary')}>
+                            {msg.text}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <Input
+                        placeholder="Хабарлама..."
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (sendMessage(chatInput.trim()), setChatInput(''))}
+                      />
+                      <Button onClick={() => (sendMessage(chatInput.trim()), setChatInput(''))} disabled={!chatInput.trim()}>
+                        <Send className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2 mt-3">
-                    <Input
-                      placeholder="Хабарлама..."
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (sendMessage(chatInput.trim()), setChatInput(''))}
-                    />
-                    <Button onClick={() => (sendMessage(chatInput.trim()), setChatInput(''))} disabled={!chatInput.trim()}>
-                      <Send className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          )}
 
           {/* Stats */}
           {isCallActive && (
