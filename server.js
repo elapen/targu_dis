@@ -1,4 +1,6 @@
-require('dotenv').config()
+// Load dotenv only if available (not needed in Docker)
+try { require('dotenv').config() } catch {}
+
 const { createServer } = require('http')
 const { parse } = require('url')
 const next = require('next')
